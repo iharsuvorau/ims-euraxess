@@ -2,10 +2,8 @@ package main
 
 import (
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"reflect"
 	"testing"
 
@@ -13,20 +11,26 @@ import (
 )
 
 func newTestServer() (ts *httptest.Server, err error) {
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		f, err := os.Open("testdata/list.html")
-		if err != nil {
-			return
-		}
-		defer f.Close()
-
-		b, err := ioutil.ReadAll(f)
-		if err != nil {
-			return
-		}
-
-		w.Write(b)
-	})), nil
+	mux := http.NewServeMux()
+	mux.Handle("/jobs/421010", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "testdata/0.html")
+	}))
+	mux.Handle("/jobs/434505", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "testdata/1.html")
+	}))
+	mux.Handle("/jobs/431934", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "testdata/2.html")
+	}))
+	mux.Handle("/jobs/415416", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "testdata/3.html")
+	}))
+	mux.Handle("/jobs/407546", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "testdata/4.html")
+	}))
+	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "testdata/list.html")
+	}))
+	return httptest.NewServer(mux), nil
 }
 
 func Test_collectOfferLinks(t *testing.T) {

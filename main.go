@@ -149,10 +149,10 @@ func collectOffer(link offerLink) (*offer, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("status code is not 200")
+		return nil, fmt.Errorf("request isn't successful for %v: %v", link, err)
 	}
+	defer resp.Body.Close()
 
 	doc, err := goquery.NewDocumentFromReader(resp.Body)
 	if err != nil {

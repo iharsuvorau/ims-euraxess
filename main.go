@@ -1,53 +1,74 @@
 package main
 
 import (
+	"bytes"
+	"flag"
 	"fmt"
+	"html/template"
 	"log"
 	"net/http"
 	"net/url"
 	"strings"
 
+	"bitbucket.org/iharsuvorau/mwpub/mediawiki"
 	"github.com/PuerkitoBio/goquery"
 )
 
-// offer describes a job offer page of Euraxess: https://euraxess.ec.europa.eu/jobs/421010.
-type offer struct {
-	title             string
-	uri               string
-	organization      string
-	researchField     string
-	researcherProfile string
-	deadline          string
-	location          string
-	typeOfContract    string
-	jobStatus         string
-	referenceNumber   string
-	body              string
-	requirements      requirements
+// Offer describes a job offer page of Euraxess: https://euraxess.ec.europa.eu/jobs/421010.
+type Offer struct {
+	Title             string
+	URI               string
+	Organization      string
+	ResearchField     string
+	ResearcherProfile string
+	Deadline          string
+	Location          string
+	TypeOfContract    string
+	JobStatus         string
+	ReferenceNumber   string
+	Body              string
+	Requirements      Requirements
 }
 
-type requirements struct {
-	researchField             string
-	yearsOfResearchExperience string
-	educationLevel            string
-	languages                 string
+type Requirements struct {
+	ResearchField             string
+	YearsOfResearchExperience string
+	EducationLevel            string
+	Languages                 string
 }
 
 func main() {
-	links, err := collectOfferLinks("https://euraxess.ec.europa.eu/jobs/search?keywords=Intelligent%20Materials%20and%20Systems%20Lab")
+	exuri := flag.String("exuri", "https://euraxess.ec.europa.eu/jobs/search?keywords=Intelligent%20Materials%20and%20Systems%20Lab", "euraxess URI to parse")
+	mwuri := flag.String("mwuri", "localhost/mediawiki", "mediawiki URI")
+	page := flag.String("page", "Job Offers", "page title to update with new offers")
+	section := flag.String("section", "Euraxess Offers", "section title on the page to create or update with new offers")
+	name := flag.String("name", "", "login name of the bot for updating pages")
+	pass := flag.String("pass", "", "login password of the bot for updating pages")
+	offersTmpl := flag.String("tmpl", "offers.tmpl", "template for the offers list")
+	flag.Parse()
+	if len(*exuri) == 0 || len(*mwuri) == 0 || len(*name) == 0 || len(*pass) == 0 || len(*section) == 0 || len(*offersTmpl) == 0 {
+		log.Fatal("all flags are compulsory, use -h to see the documentation")
+	}
+
+	links, err := collectOfferLinks(*exuri)
+	if err != nil {
+		log.Fatal(err)
+	}
+	offers := collectOffers(links)
+	markup, err := renderOffers(offers, *offersTmpl)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	fmt.Printf("%+v", links)
+	// According to https://www.mediawiki.org/wiki/API:Edit there are following contentmodels
+	// available: MassMessageListContent, flow-board, Scribunto, JsonSchema, NewsletterContent,
+	// wikitext, javascript, json, css, tex
+	var contentModel = "wikitext"
 
-	offers := collectOffers(links)
-
-	fmt.Printf("results: %+v", offers)
-
-	// TODO: render wikitext from offers
-
-	// TODO: create or update pages on the wiki
+	_, err = mediawiki.UpdatePage(*mwuri, *page, markup, contentModel, *name, *pass, *section)
+	if err != nil {
+		log.Fatal(err)
+	}
 }
 
 type offerLink struct {
@@ -95,8 +116,8 @@ func collectOfferLinks(path string) ([]offerLink, error) {
 	return links, nil
 }
 
-func collectOffersSequential(links []offerLink) ([]*offer, error) {
-	offers := make([]*offer, len(links))
+func collectOffersSequential(links []offerLink) ([]*Offer, error) {
+	offers := make([]*Offer, len(links))
 	for i := range links {
 		offer, err := collectOffer(links[i])
 		if err != nil {
@@ -108,11 +129,11 @@ func collectOffersSequential(links []offerLink) ([]*offer, error) {
 	return offers, nil
 }
 
-func collectOffers(links []offerLink) []*offer {
+func collectOffers(links []offerLink) []*Offer {
 	var limit = 10
 	sem := make(chan bool, limit)
 	errs := make(chan error, len(links))
-	ofrs := make(chan *offer, len(links))
+	ofrs := make(chan *Offer, len(links))
 	for _, link := range links {
 		sem <- true
 		go func(link offerLink) {
@@ -128,7 +149,7 @@ func collectOffers(links []offerLink) []*offer {
 	close(errs)
 	close(ofrs)
 
-	offers := []*offer{}
+	offers := []*Offer{}
 	for o := range ofrs {
 		if o == nil {
 			continue
@@ -144,7 +165,7 @@ func collectOffers(links []offerLink) []*offer {
 	return offers
 }
 
-func collectOffer(link offerLink) (*offer, error) {
+func collectOffer(link offerLink) (*Offer, error) {
 	resp, err := http.Get(link.uri)
 	if err != nil {
 		return nil, err
@@ -177,25 +198,32 @@ func collectOffer(link offerLink) (*offer, error) {
 		researchField = strings.Join(ar, ", ")
 	}
 
-	ofr := offer{
-		title:             link.title,
-		uri:               link.uri,
-		organization:      strings.TrimSpace(doc.Find(".node-offer-posting ul.list-items .field-company-institute").First().Text()),
-		researchField:     researchField,
-		researcherProfile: strings.TrimSpace(doc.Find(".node-offer-posting ul.list-items .field-research-profile").First().Text()),
-		deadline:          strings.TrimSpace(doc.Find(".node-offer-posting ul.list-items .field-application-deadline").First().Text()),
-		location:          strings.TrimSpace(doc.Find(".node-offer-posting ul.list-items .field-country").First().Text()),
-		typeOfContract:    strings.TrimSpace(doc.Find(".node-offer-posting ul.list-items .field-type-of-contract").First().Text()),
-		jobStatus:         strings.TrimSpace(doc.Find(".node-offer-posting ul.list-items .field-job-status").First().Text()),
-		referenceNumber:   strings.TrimSpace(doc.Find(".node-offer-posting ul.list-items .field-reference-number").First().Text()),
-		body:              body,
-		requirements: requirements{
-			researchField:             strings.TrimSpace(doc.Find(".field-required-research-xp .field-research-field").First().Text()),
-			yearsOfResearchExperience: strings.TrimSpace(doc.Find(".field-required-research-xp .field-years-of-research").First().Text()),
-			educationLevel:            strings.TrimSpace(doc.Find(".field-offer-requirements .field-education-level").First().Text()),
-			languages:                 strings.TrimSpace(doc.Find(".field-offer-requirements .field-language-level").First().Text()),
+	ofr := Offer{
+		Title:             link.title,
+		URI:               link.uri,
+		Organization:      strings.TrimSpace(doc.Find(".node-offer-posting ul.list-items .field-company-institute").First().Text()),
+		ResearchField:     researchField,
+		ResearcherProfile: strings.TrimSpace(doc.Find(".node-offer-posting ul.list-items .field-research-profile").First().Text()),
+		Deadline:          strings.TrimSpace(doc.Find(".node-offer-posting ul.list-items .field-application-deadline").First().Text()),
+		Location:          strings.TrimSpace(doc.Find(".node-offer-posting ul.list-items .field-country").First().Text()),
+		TypeOfContract:    strings.TrimSpace(doc.Find(".node-offer-posting ul.list-items .field-type-of-contract").First().Text()),
+		JobStatus:         strings.TrimSpace(doc.Find(".node-offer-posting ul.list-items .field-job-status").First().Text()),
+		ReferenceNumber:   strings.TrimSpace(doc.Find(".node-offer-posting ul.list-items .field-reference-number").First().Text()),
+		Body:              body,
+		Requirements: Requirements{
+			ResearchField:             strings.TrimSpace(doc.Find(".field-required-research-xp .field-research-field").First().Text()),
+			YearsOfResearchExperience: strings.TrimSpace(doc.Find(".field-required-research-xp .field-years-of-research").First().Text()),
+			EducationLevel:            strings.TrimSpace(doc.Find(".field-offer-requirements .field-education-level").First().Text()),
+			Languages:                 strings.TrimSpace(doc.Find(".field-offer-requirements .field-language-level").First().Text()),
 		},
 	}
 
 	return &ofr, nil
+}
+
+func renderOffers(offers []*Offer, paths ...string) (string, error) {
+	var tmpl = template.Must(template.ParseFiles(paths...))
+	var out bytes.Buffer
+	err := tmpl.Execute(&out, offers)
+	return out.String(), err
 }

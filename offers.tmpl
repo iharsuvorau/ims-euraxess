@@ -1,0 +1,19 @@
+{{- range . }}
+=== {{.Title}} ===
+
+; Organization : {{.Organization}}
+; Research Field : {{.ResearchField}}
+; Researcher Profile : <nowiki>{{.ResearcherProfile}}</nowiki>
+; Deadline : {{.Deadline}}
+; Location : {{.Location }}
+; Type of Contract : {{.TypeOfContract}}
+; Job Status : {{.JobStatus}}
+{{- if .Requirements}}{{with .Requirements}}
+; Requirements
+{{if .ResearchField}}:; Research Field : {{.ResearchField}}{{end}}
+{{if .YearsOfResearchExperience}}:; Years of Research Experience : {{.YearsOfResearchExperience}}{{end}}
+{{if .EducationLevel}}:; Education Level : {{.EducationLevel}}{{end}}
+{{if .Languages}}:; Languages : {{.Languages}}{{end}}
+{{ end }}{{ end -}}
+See [{{.URI}} the offer] on Euraxess website.
+{{ end -}}

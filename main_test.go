@@ -120,7 +120,7 @@ func Test_collectOffers(t *testing.T) {
 	tests := []struct {
 		name    string
 		args    args
-		want    []offer
+		want    []Offer
 		wantErr bool
 	}{
 		{

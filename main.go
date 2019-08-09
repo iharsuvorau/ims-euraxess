@@ -41,10 +41,7 @@ func main() {
 
 	fmt.Printf("%+v", links)
 
-	offers, err := collectOffers(links)
-	if err != nil {
-		log.Fatal(err)
-	}
+	offers := collectOffers(links)
 
 	fmt.Printf("results: %+v", offers)
 
@@ -98,16 +95,53 @@ func collectOfferLinks(path string) ([]offerLink, error) {
 	return links, nil
 }
 
-func collectOffers(links []offerLink) ([]*offer, error) {
+func collectOffersSequential(links []offerLink) ([]*offer, error) {
 	offers := make([]*offer, len(links))
 	for i := range links {
-		offer, err := collectOffer(links[i]) // TODO: make concurrent
+		offer, err := collectOffer(links[i])
 		if err != nil {
 			return nil, err
 		}
 		offers[i] = offer
 	}
+
 	return offers, nil
+}
+
+func collectOffers(links []offerLink) []*offer {
+	var limit = 10
+	sem := make(chan bool, limit)
+	errs := make(chan error, len(links))
+	ofrs := make(chan *offer, len(links))
+	for _, link := range links {
+		sem <- true
+		go func(link offerLink) {
+			defer func() { <-sem }()
+			offer, err := collectOffer(link)
+			ofrs <- offer
+			errs <- err
+		}(link)
+	}
+	for i := 0; i < cap(sem); i++ {
+		sem <- true
+	}
+	close(errs)
+	close(ofrs)
+
+	offers := []*offer{}
+	for o := range ofrs {
+		if o == nil {
+			continue
+		}
+		offers = append(offers, o)
+	}
+	for err := range errs {
+		if err != nil {
+			log.Printf("failed to collect an offer: %v", err)
+		}
+	}
+
+	return offers
 }
 
 func collectOffer(link offerLink) (*offer, error) {

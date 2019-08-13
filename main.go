@@ -39,7 +39,7 @@ type Requirements struct {
 }
 
 func main() {
-	exuri := flag.String("uri", "https://euraxess.ec.europa.eu/jobs/search?keywords=Intelligent%20Materials%20and%20Systems%20Lab", "euraxess URI to parse")
+	exuri := flag.String("uri", "", "euraxess URI to parse")
 	mwuri := flag.String("mwuri", "localhost/mediawiki", "mediawiki URI")
 	page := flag.String("page", "Job Offers", "page title to update with new offers")
 	section := flag.String("section", "Euraxess Offers", "section title on the page to create or update with new offers")

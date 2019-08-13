@@ -39,7 +39,7 @@ type Requirements struct {
 }
 
 func main() {
-	exuri := flag.String("exuri", "https://euraxess.ec.europa.eu/jobs/search?keywords=Intelligent%20Materials%20and%20Systems%20Lab", "euraxess URI to parse")
+	exuri := flag.String("uri", "https://euraxess.ec.europa.eu/jobs/search?keywords=Intelligent%20Materials%20and%20Systems%20Lab", "euraxess URI to parse")
 	mwuri := flag.String("mwuri", "localhost/mediawiki", "mediawiki URI")
 	page := flag.String("page", "Job Offers", "page title to update with new offers")
 	section := flag.String("section", "Euraxess Offers", "section title on the page to create or update with new offers")
@@ -55,7 +55,12 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	if len(links) == 0 {
+		return
+	}
+
 	offers := collectOffers(links)
+
 	markup, err := renderOffers(offers, *offersTmpl)
 	if err != nil {
 		log.Fatal(err)
@@ -99,7 +104,15 @@ func collectOfferLinks(path string) ([]offerLink, error) {
 
 	links := []offerLink{}
 
-	doc.Find("#block-system-main div.view-content div.views-row").Each(func(i int, s *goquery.Selection) {
+	contentRows := doc.Find("#block-system-main div.view-content div.views-row")
+
+	// no offers found
+	if contentRows.Length() == 0 {
+		return links, nil
+	}
+
+	// collecting found offers
+	contentRows.Each(func(i int, s *goquery.Selection) {
 		item := s.Find("h2 a")
 		title := item.Text()
 		href, ok := item.Attr("href")

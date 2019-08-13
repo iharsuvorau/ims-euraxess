@@ -24,9 +24,10 @@ type Offer struct {
 	Deadline          string
 	Location          string
 	TypeOfContract    string
+	HoursPerWeek      string
 	JobStatus         string
 	ReferenceNumber   string
-	Body              string
+	Body              template.HTML
 	Requirements      Requirements
 }
 
@@ -98,7 +99,6 @@ func collectOfferLinks(path string) ([]offerLink, error) {
 
 	links := []offerLink{}
 
-	// section#block-system-main > div.view-content > div.views-row > h2 > a
 	doc.Find("#block-system-main div.view-content div.views-row").Each(func(i int, s *goquery.Selection) {
 		item := s.Find("h2 a")
 		title := item.Text()
@@ -180,12 +180,29 @@ func collectOffer(link offerLink) (*Offer, error) {
 		return nil, err
 	}
 
+	// replacing body links with wikitext markup
 	body, err := doc.Find(".node-offer-posting .field-body").Html()
 	if err != nil {
 		return nil, err
 	}
+	bodyLinks := doc.Find(".node-offer-posting .field-body a")
+	bodyLinksContent := make([][]string, bodyLinks.Length())
+	bodyLinks.Each(func(i int, link *goquery.Selection) {
+		html, err := goquery.OuterHtml(link)
+		if err != nil {
+			return
+		}
+		href, _ := link.Attr("href")
+		text := link.Text()
+		bodyLinksContent[i] = []string{html, href, text}
+	})
+	for _, link := range bodyLinksContent {
+		newLink := fmt.Sprintf("[%s %s]", link[1], link[2])
+		log.Println("replacing", link[0], newLink)
+		body = strings.ReplaceAll(body, link[0], newLink)
+	}
 
-	// cleaning up complex markup
+	// cleaning up complex markup of one field
 	researchField := strings.TrimSpace(doc.Find(".node-offer-posting ul.list-items .field-research-field").First().Text())
 	{
 		a := strings.Split(researchField, "\n")
@@ -207,9 +224,10 @@ func collectOffer(link offerLink) (*Offer, error) {
 		Deadline:          strings.TrimSpace(doc.Find(".node-offer-posting ul.list-items .field-application-deadline").First().Text()),
 		Location:          strings.TrimSpace(doc.Find(".node-offer-posting ul.list-items .field-country").First().Text()),
 		TypeOfContract:    strings.TrimSpace(doc.Find(".node-offer-posting ul.list-items .field-type-of-contract").First().Text()),
+		HoursPerWeek:      strings.TrimSpace(doc.Find(".node-offer-posting ul.list-items .field-hours-per-week").First().Text()),
 		JobStatus:         strings.TrimSpace(doc.Find(".node-offer-posting ul.list-items .field-job-status").First().Text()),
 		ReferenceNumber:   strings.TrimSpace(doc.Find(".node-offer-posting ul.list-items .field-reference-number").First().Text()),
-		Body:              body,
+		Body:              template.HTML(body),
 		Requirements: Requirements{
 			ResearchField:             strings.TrimSpace(doc.Find(".field-required-research-xp .field-research-field").First().Text()),
 			YearsOfResearchExperience: strings.TrimSpace(doc.Find(".field-required-research-xp .field-years-of-research").First().Text()),

@@ -1,19 +1,22 @@
 {{- range . }}
 === {{.Title}} ===
 
-; Organization : {{.Organization}}
-; Research Field : {{.ResearchField}}
-; Researcher Profile : <nowiki>{{.ResearcherProfile}}</nowiki>
-; Deadline : {{.Deadline}}
-; Location : {{.Location }}
-; Type of Contract : {{.TypeOfContract}}
-; Job Status : {{.JobStatus}}
-{{- if .Requirements}}{{with .Requirements}}
+{{if .Organization}}; Organization : {{.Organization}}{{end}}
+{{if .ResearchField}}; Research Field : {{.ResearchField}}{{end}}
+{{if .ResearcherProfile}}; Researcher Profile : <nowiki>{{.ResearcherProfile}}</nowiki>{{end}}
+{{if .Deadline}}; Deadline : {{.Deadline}}{{end}}
+{{if .Deadline}}; Location : {{.Location }}{{end}}
+{{if .TypeOfContract}}; Type Of Contract : {{.TypeOfContract}}{{end}}
+{{if .HoursPerWeek}}; Hours Per Week : {{.HoursPerWeek}}{{end}}
+{{if .JobStatus}}; Job Status : {{.JobStatus}}{{end}}
+{{- if .Requirements}}{{with .Requirements -}}
+{{ if or (gt (len .ResearchField) 0) (gt (len .YearsOfResearchExperience) 0) (gt (len .EducationLevel) 0) (gt (len .Languages) 0)}}
 ; Requirements
 {{if .ResearchField}}:; Research Field : {{.ResearchField}}{{end}}
 {{if .YearsOfResearchExperience}}:; Years of Research Experience : {{.YearsOfResearchExperience}}{{end}}
 {{if .EducationLevel}}:; Education Level : {{.EducationLevel}}{{end}}
 {{if .Languages}}:; Languages : {{.Languages}}{{end}}
-{{ end }}{{ end -}}
+{{- end}}{{end}}{{ end -}}
 See [{{.URI}} the offer] on Euraxess website.
+{{.Body}}
 {{ end -}}

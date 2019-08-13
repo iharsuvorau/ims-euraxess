@@ -82,6 +82,7 @@ type offerLink struct {
 	uri   string
 }
 
+// collectOfferLinks collects information from a search pages provided via a flag.
 func collectOfferLinks(path string) ([]offerLink, error) {
 	resourceURI, err := url.Parse(path)
 	if err != nil {
@@ -142,6 +143,7 @@ func collectOffersSequential(links []offerLink) ([]*Offer, error) {
 	return offers, nil
 }
 
+// collectOffers downloads and parses offers concurrently and logs any errors.
 func collectOffers(links []offerLink) []*Offer {
 	var limit = 10
 	sem := make(chan bool, limit)
@@ -211,7 +213,6 @@ func collectOffer(link offerLink) (*Offer, error) {
 	})
 	for _, link := range bodyLinksContent {
 		newLink := fmt.Sprintf("[%s %s]", link[1], link[2])
-		log.Println("replacing", link[0], newLink)
 		body = strings.ReplaceAll(body, link[0], newLink)
 	}
 
@@ -252,6 +253,7 @@ func collectOffer(link offerLink) (*Offer, error) {
 	return &ofr, nil
 }
 
+// renderOffers produces HTML markup provided templates and data.
 func renderOffers(offers []*Offer, paths ...string) (string, error) {
 	var tmpl = template.Must(template.ParseFiles(paths...))
 	var out bytes.Buffer

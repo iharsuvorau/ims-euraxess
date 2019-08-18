@@ -147,7 +147,7 @@ func collectOffersSequential(links []offerLink) ([]*Offer, error) {
 func collectOffers(links []offerLink) []*Offer {
 	var limit = 10
 	sem := make(chan bool, limit)
-	errs := make(chan error, len(links))
+	errs := make(chan error)
 	ofrs := make(chan *Offer, len(links))
 	for _, link := range links {
 		sem <- true

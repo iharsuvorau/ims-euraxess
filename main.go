@@ -10,7 +10,7 @@ import (
 	"net/url"
 	"strings"
 
-	"bitbucket.org/iharsuvorau/mwpub/mediawiki"
+	"bitbucket.org/iharsuvorau/mediawiki"
 	"github.com/PuerkitoBio/goquery"
 )
 

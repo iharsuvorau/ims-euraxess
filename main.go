@@ -8,7 +8,9 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
+	"sync"
 
 	"bitbucket.org/iharsuvorau/mediawiki"
 	"github.com/PuerkitoBio/goquery"
@@ -31,6 +33,7 @@ type Offer struct {
 	Requirements      Requirements
 }
 
+// Requirements describes offer requirements.
 type Requirements struct {
 	ResearchField             string
 	YearsOfResearchExperience string
@@ -38,17 +41,34 @@ type Requirements struct {
 	Languages                 string
 }
 
+// TODO: a job has an expiration date after which it must be removed from the wiki
+// TODO: fix templating issue
+
 func main() {
 	exuri := flag.String("uri", "", "euraxess URI to parse")
 	mwuri := flag.String("mwuri", "localhost/mediawiki", "mediawiki URI")
 	page := flag.String("page", "Job Offers", "page title to update with new offers")
 	section := flag.String("section", "Euraxess Offers", "section title on the page to create or update with new offers")
+	keyword := flag.String("keyword", "IMS lab", "keyword to look for in Organization field at the Euraxess website")
 	name := flag.String("name", "", "login name of the bot for updating pages")
 	pass := flag.String("pass", "", "login password of the bot for updating pages")
 	offersTmpl := flag.String("tmpl", "offers.tmpl", "template for the offers list")
+	logPath := flag.String("log", "euraxess.log", "specify the filepath for a log file, if it's empty all messages are logged into stdout")
 	flag.Parse()
 	if len(*exuri) == 0 || len(*mwuri) == 0 || len(*name) == 0 || len(*pass) == 0 || len(*section) == 0 || len(*offersTmpl) == 0 {
 		log.Fatal("all flags are compulsory, use -h to see the documentation")
+	}
+
+	var logger *log.Logger
+	if len(*logPath) > 0 {
+		f, err := os.Create(*logPath)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer f.Close()
+		logger = log.New(f, "", log.LstdFlags)
+	} else {
+		logger = log.New(os.Stdout, "", log.LstdFlags)
 	}
 
 	links, err := collectOfferLinks(*exuri)
@@ -58,10 +78,20 @@ func main() {
 	if len(links) == 0 {
 		return
 	}
+	logger.Printf("%v links have been collected", len(links))
 
-	offers := collectOffers(links)
+	offers := collectOffers(links, logger)
+	logger.Printf("%v offers have been collected", len(offers))
 
-	markup, err := renderOffers(offers, *offersTmpl)
+	// filter only IMS offers
+	imsOffers := []*Offer{}
+	for _, v := range offers {
+		if strings.Contains(strings.ToLower(v.Organization), strings.ToLower(*keyword)) {
+			imsOffers = append(imsOffers, v)
+		}
+	}
+
+	markup, err := renderOffers(imsOffers, *offersTmpl)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -75,6 +105,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	logger.Println("wiki page has been updated")
 }
 
 type offerLink struct {
@@ -82,7 +113,7 @@ type offerLink struct {
 	uri   string
 }
 
-// collectOfferLinks collects information from a search pages provided via a flag.
+// collectOfferLinks collects information from a search page provided via a flag.
 func collectOfferLinks(path string) ([]offerLink, error) {
 	resourceURI, err := url.Parse(path)
 	if err != nil {
@@ -130,10 +161,10 @@ func collectOfferLinks(path string) ([]offerLink, error) {
 	return links, nil
 }
 
-func collectOffersSequential(links []offerLink) ([]*Offer, error) {
+func collectOffersSequential(links []offerLink, logger *log.Logger) ([]*Offer, error) {
 	offers := make([]*Offer, len(links))
 	for i := range links {
-		offer, err := collectOffer(links[i])
+		offer, err := collectOffer(links[i], logger)
 		if err != nil {
 			return nil, err
 		}
@@ -144,43 +175,33 @@ func collectOffersSequential(links []offerLink) ([]*Offer, error) {
 }
 
 // collectOffers downloads and parses offers concurrently and logs any errors.
-func collectOffers(links []offerLink) []*Offer {
-	var limit = 10
-	sem := make(chan bool, limit)
-	errs := make(chan error)
-	ofrs := make(chan *Offer, len(links))
+func collectOffers(links []offerLink, logger *log.Logger) []*Offer {
+	offers := []*Offer{}
+	var wg sync.WaitGroup
 	for _, link := range links {
-		sem <- true
+		wg.Add(1)
 		go func(link offerLink) {
-			defer func() { <-sem }()
-			offer, err := collectOffer(link)
-			ofrs <- offer
-			errs <- err
+			defer func() {
+				wg.Done()
+				logger.Println("wg done called")
+			}()
+			logger.Printf("getting %v", link.title)
+			offer, err := collectOffer(link, logger)
+			if err != nil {
+				logger.Printf("failed to collect an offer: %v", err)
+			} else {
+				offers = append(offers, offer)
+			}
 		}(link)
 	}
-	for i := 0; i < cap(sem); i++ {
-		sem <- true
-	}
-	close(errs)
-	close(ofrs)
-
-	offers := []*Offer{}
-	for o := range ofrs {
-		if o == nil {
-			continue
-		}
-		offers = append(offers, o)
-	}
-	for err := range errs {
-		if err != nil {
-			log.Printf("failed to collect an offer: %v", err)
-		}
-	}
+	wg.Wait()
 
 	return offers
 }
 
-func collectOffer(link offerLink) (*Offer, error) {
+func collectOffer(link offerLink, logger *log.Logger) (*Offer, error) {
+	logger.Printf("downloading %v", link.uri)
+
 	resp, err := http.Get(link.uri)
 	if err != nil {
 		return nil, err
@@ -189,6 +210,9 @@ func collectOffer(link offerLink) (*Offer, error) {
 		return nil, fmt.Errorf("request isn't successful for %v: %v", link, err)
 	}
 	defer resp.Body.Close()
+
+	logger.Printf("parsing %v", link.uri)
+	defer logger.Printf("done with %v", link.uri)
 
 	doc, err := goquery.NewDocumentFromReader(resp.Body)
 	if err != nil {

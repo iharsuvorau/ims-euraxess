@@ -2,8 +2,10 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"reflect"
 	"testing"
 
@@ -114,6 +116,8 @@ func Test_collectOffers(t *testing.T) {
 		t.Error(err)
 	}
 
+	logger := log.New(os.Stdout, "", log.LstdFlags)
+
 	type args struct {
 		links []offerLink
 	}
@@ -131,7 +135,7 @@ func Test_collectOffers(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := collectOffers(tt.args.links)
+			got := collectOffers(tt.args.links, logger)
 			if len(got) != len(links) {
 				t.Errorf("want: %v, got: %v", len(got), len(links))
 				return
@@ -152,9 +156,11 @@ func Benchmark_collectOffersSequential(b *testing.B) {
 		b.Errorf("failed to collect links: %v", err)
 	}
 
+	logger := log.New(os.Stdout, "", log.LstdFlags)
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := collectOffersSequential(links)
+		_, err := collectOffersSequential(links, logger)
 		if err != nil {
 			b.Error(err)
 		}
@@ -173,8 +179,10 @@ func Benchmark_collectOffers(b *testing.B) {
 		b.Errorf("failed to collect links: %v", err)
 	}
 
+	logger := log.New(os.Stdout, "", log.LstdFlags)
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = collectOffers(links)
+		_ = collectOffers(links, logger)
 	}
 }

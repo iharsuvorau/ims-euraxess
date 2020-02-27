@@ -1,5 +1,6 @@
+{{- if gt (len .) 0 }}
 {{- range . -}}
-=== {{.Title}} ===
+=== [{{.URI}} {{.Title}}] ===
 
 {{if .Organization}}; Organization : {{.Organization}}{{end}}
 {{if .ResearchField}}; Research Field : {{.ResearchField}}{{end}}
@@ -12,11 +13,13 @@
 {{- if .Requirements}}{{with .Requirements -}}
 {{ if or (gt (len .ResearchField) 0) (gt (len .YearsOfResearchExperience) 0) (gt (len .EducationLevel) 0) (gt (len .Languages) 0)}}
 ; Requirements
-{{if .ResearchField}}:; Research Field : {{.ResearchField}}{{end}}
-{{if .YearsOfResearchExperience}}:; Years of Research Experience : {{.YearsOfResearchExperience}}{{end}}
-{{if .EducationLevel}}:; Education Level : {{.EducationLevel}}{{end}}
+{{if .ResearchField}}:; Research Field : {{.ResearchField}}{{end -}}
+{{if .YearsOfResearchExperience}}:; Years of Research Experience : {{.YearsOfResearchExperience}}{{end -}}
+{{if .EducationLevel}}:; Education Level : {{.EducationLevel}}{{end -}}
 {{if .Languages}}:; Languages : {{.Languages}}{{end}}
-{{- end}}{{end}}{{ end -}}
+{{- end}}{{end}}{{ end }}
 See [{{.URI}} the offer] on Euraxess website.
-{{.Body}}
 {{ end -}}
+{{else -}}
+No open positions.
+{{end}}
